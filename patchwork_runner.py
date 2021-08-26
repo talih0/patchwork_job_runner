@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 
+from commit_message_filter import check_commit_message
 from email.message import EmailMessage
 from job import Job
 from mysql_helper import SQLDatabase
@@ -256,6 +257,16 @@ def fetch_and_process_patches(mydb, jobs_list):
                 else:
                     post_check(patch["check_url"], "warning", "configure" + job.name, "Failed to apply patch", ret.stderr)
                     continue
+
+            # check commit message
+            git_cmd = git_cmd_template + " log --format=%B -n 1 master"
+            ret = subprocess.run(git_cmd, capture_output=True, shell=True)
+            commit_msg = ret.stdout.decode("utf-8")
+            warn = check_commit_message(commit_msg)
+            if warn:
+                print (warn)
+                post_check(patch["check_url"], "warning", "commit_msg_" + job.name, warn, "")
+                notify_by_email(mydb, patch)
 
             git_cmd = git_cmd_template + " rev-parse master"
             ret = subprocess.run(git_cmd, capture_output=True, shell=True)
