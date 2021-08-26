@@ -8,8 +8,11 @@ import socks
 import subprocess
 import sys
 import time
+import urllib.parse
 
 from commit_message_filter import check_commit_message
+from datetime import datetime, timezone
+from dateutil.relativedelta import relativedelta
 from email.message import EmailMessage
 from job import Job
 from mysql_helper import SQLDatabase
@@ -171,7 +174,13 @@ def fetch_and_process_patches(mydb, jobs_list):
 
     headers = {"Authorization" : "Token %s" % patchwork_token, "Host": patchwork_host}
 
-    url = "https://" + patchwork_host + "/api/1.0/events/?category=patch-completed"
+    utc_time = datetime.utcnow()
+    utc_time = utc_time - relativedelta(hours=2)
+    str_time = utc_time.strftime("%Y-%m-%dT%H:%M:%S")
+    str_time = urllib.parse.quote(str_time)
+    url_request = "/api/events/?category=patch-completed&since=" + str_time
+    url = "https://" + patchwork_host + url_request
+
     resp = requests.get(url, headers = headers)
     print (resp)
     reply_list = json.loads(resp.content)
@@ -199,6 +208,13 @@ def fetch_and_process_patches(mydb, jobs_list):
         print ("Patch url: %s" % patch_url)
         print ("Mbox: %s" % mbox)
         print ("User link: %s" % mbox[:-5])
+
+        keys = list()
+        keys.append("msg_id")
+        res = mydb.query("patch", keys, "WHERE msg_id = \"%s\"" % msg_id)
+        if res:
+            continue
+        mydb.insert("patch", {"msg_id" : "%s" % msg_id})
 
         patch_list.append({"msg_id" : msg_id, "series_id" : series_id, "event_id" : event_id,
             "msg_id" : msg_id, "mbox" : mbox, "author_email" : author_email,
@@ -298,12 +314,6 @@ def fetch_and_process_patches(mydb, jobs_list):
             if job_result['unit_test_success'] == 0 and job_result_prev['unit_test_success'] == 1:
                 notify_by_email(mydb, patch)
 
-            headers = {"Content-Type" : "application/json", "Authorization" : "Token %s" % patchwork_token}
-            payload = "{\"category\":\"patch-state-changed\"}"
-            event_url = "https://" + patchwork_host + "/api/1.0/events/%d/" % patch["event_id"]
-            resp = requests.patch(event_url, headers=headers, data=payload)
-            print(resp)
-
     return patch_list
 
 if __name__ == "__main__":
@@ -344,6 +354,10 @@ if __name__ == "__main__":
     # series. We don't want to send an email for each commit that's failed, but
     # only once per series
     mydb.create_missing_table("series", "(id INT AUTO_INCREMENT PRIMARY KEY, series_id INT, email_sent BIT(1))")
+
+    # this tables stores the patches we have already processed locally
+    # it is used for checking we don't run the same job twice
+    mydb.create_missing_table("patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256))")
 
     while 1:
         patch_list = fetch_and_process_patches(mydb, jobs_list)
