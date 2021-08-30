@@ -1,0 +1,57 @@
+This repo has python helper to setup custom CI jobs (i.e. different
+OS, architectures, etc) for FFmpeg or any other project that uses patchwork (see
+https://github.com/getpatchwork/patchwork for more details).
+
+The script periodically queries the patchwork site for new patches. CI jobs are
+run on new patches and the results are posted to the patchwork site.
+In the context of FFmpeg, this includes running ./configure, make build, and make fate.
+
+-- CI jobs --
+The CI jobs are setup in class Job. This class has functions setup(), build(),
+and unit_test(). In our implementation the functions start docker
+containers which run ./configure, make build, and make fate. The containers are
+launched using subprocess.run() which captures stdout, stderr, and success of
+the process. The return struct is forwarded to the calling functions which
+determines how to process the output (i.e. posts result to patchwork, notify
+user by email). Custom jobs can therefore be created modifying the job class. Use of containers is
+recomended for isolating the process.
+
+--- Caching results ---
+The code currently uses a mysql database to track information and cache job
+results. The config of the database are set by the environment variables:
+PATCHWORK_DB_{HOST,USER,PASSWORD}.
+
+--- Automated emails ---
+If a CI job fails, an automated email is triggered to the patch author with a
+link to the patchwork site where the warning or error is shown. To prevent
+spamming the author, only one email is triggered per patch series. An email is
+also only sent if the parent commit builds successfully. Thus if current
+origin/master doesn't build, an email will not be sent (unless a commit fixes
+the issue and breaks it another commit of the series). The environment variables
+for connecting to an SMTP server are
+PATCHWORK_SMTP_{HOST,PORT}, PATCHWORK_{USER_EMAIL,PASSWORD_EMAIL}.
+The environment variable PATCHWORK_CC_EMAIL is used to add a cc email address.
+
+--- Patchwork authentication ---
+An account (on https://patchwork.ffmpeg.org) and proper permission are needed to post
+CI results back to the patchwork site. Email your patchwork site maintainer in
+(FFmpeg/MAINTERNERS) with your username if you want the permissions added to your account.
+After the permissions are set up, an API token can be obtained after logging in
+to the patchwork site. The environment variable PATCHWORK_TOKEN stores the api
+token. The variable PATCHWORK_HOST needs to be set to patchwork.ffmpeg.org or
+another patchwork site.
+
+-- Other environemnt variables --
+The following variables are used by the docker container for the CI job:
+PATCHWORK_{UID,GID} set the uid/gid of the docker container.
+PATCHWORK_PROJECT_ROOT_PATH is the path to the main FFmpeg directory.
+
+-- Steps to setup a CI job runner --
+1. Create an account on patchwork.ffmpeg.org and email your patchwork maintainer to setup
+permissions.
+2. Modify class Job in job.py for your CI job setup.
+3. Export the environment variables described above.
+4. Start a mysql server instance, i.e. using docker:
+$ docker run --name "ffmpeg_mysql" -e MYSQL_ROOT_PASSWORD=${PATCHWORK_DB_PASSWORD} --rm -v sqldb:/var/lib/mysql -p 3306:3306 mysql:5.7
+5. Start the job runner with:
+$ python patchwork_runner.py
