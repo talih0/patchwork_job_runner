@@ -16,8 +16,15 @@ from dateutil.relativedelta import relativedelta
 from email.message import EmailMessage
 from job import Job
 from mysql_helper import SQLDatabase
+from proxy_smtplib import ProxySMTP
 
 env = os.environ
+use_proxy = int(env["PATCHWORK_USE_PROXY"])
+socks_dynamic_port = int(env["PATCHWORK_SOCKS_DYNAMIC_PORT"])
+proxy_host = env["PATCHWORK_PROXY_HOST"]
+socks_proxy_uname = env["PATCHWORK_SOCKS_PROXY_UNAME"]
+socks_proxy_ip = env["PATCHWORK_SOCKS_PROXY_IP"]
+socks_proxy_port = int(env["PATCHWORK_SOCKS_PROXY_PORT"])
 
 db_host = env["PATCHWORK_DB_HOST"]
 db_user = env["PATCHWORK_DB_USER"]
@@ -160,7 +167,15 @@ def notify_by_email(mydb, patch):
     msg_email["In-Reply-To"] = patch["msg_id"]
     msg_email["References"] = patch["msg_id"]
 
-    smtp = smtplib.SMTP(smtp_host, smtp_port)
+    print ("Proxy is %d" % use_proxy)
+    if use_proxy == 1:
+        print ("Using proxy")
+        proxy_setup_cmd = "ssh -f -D %d -p %d %s@%s sleep 10" % (socks_dynamic_port, socks_proxy_port, socks_proxy_uname, socks_proxy_ip)
+        ret = subprocess.run(proxy_setup_cmd, shell=True)
+        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = socks_proxy_uname, proxy_port = socks_dynamic_port)
+    else:
+        smtp = smtplib.SMTP(smtp_host, smtp_port)
+
     smtp.starttls()
     smtp.login(user_email, password_email)
     smtp.sendmail(msg_email["From"], msg_email["To"], msg_email.as_string())
