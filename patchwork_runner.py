@@ -281,7 +281,7 @@ def fetch_and_process_patches(mydb, jobs_list):
             if ret.returncode != 0:
                 if re.search(b"Patch is empty", ret.stdout):
                     git_cmd = git_cmd_template + "am --keep-cr --skip"
-                    ret = subprocess.run(run_cmd, capture_output=True, shell=True)
+                    ret = subprocess.run(git_cmd, capture_output=True, shell=True)
                     if ret.returncode != 0:
                         post_check(patch["check_url"], "warning", "configure" + job.name, "Failed to apply patch", "")
                         continue
