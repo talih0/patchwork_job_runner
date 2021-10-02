@@ -114,7 +114,7 @@ def run_job(mydb, commit_hash, job):
         ret = job.build()
         if ret.returncode != 0:
             job_result["build_success"] = 0
-            job_result["build_log"] = ret.stderr
+            job_result["build_log"] = ret.stderr.replace(b'"', b'\'')
             fail = 1
         else:
             job_result["build_success"] = 1
@@ -129,7 +129,7 @@ def run_job(mydb, commit_hash, job):
         ret = job.unit_tests()
         if ret.returncode != 0:
             job_result["unit_test_success"] = 0
-            job_result["unit_test_log"] = ret.stderr
+            job_result["unit_test_log"] = ret.stderr.replace(b'"', b'\'')
             fail = 1
         else:
             job_result["unit_test_success"] = 1
