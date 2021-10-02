@@ -31,7 +31,7 @@ db_user = env["PATCHWORK_DB_USER"]
 db_password = env["PATCHWORK_DB_PASSWORD"]
 
 smtp_host = env["PATCHWORK_SMTP_HOST"]
-smtp_port = env["PATCHWORK_SMTP_PORT"]
+smtp_port = int(env["PATCHWORK_SMTP_PORT"])
 user_email = env["PATCHWORK_USER_EMAIL"]
 cc_email = env["PATCHWORK_CC_EMAIL"]
 password_email = env["PATCHWORK_PASSWORD_EMAIL"]
