@@ -172,7 +172,7 @@ def notify_by_email(mydb, patch):
         print ("Using proxy")
         proxy_setup_cmd = "ssh -f -D %d -p %d %s@%s sleep 10" % (socks_dynamic_port, socks_proxy_port, socks_proxy_uname, socks_proxy_ip)
         ret = subprocess.run(proxy_setup_cmd, shell=True)
-        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = socks_proxy_uname, proxy_port = socks_dynamic_port)
+        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = proxy_host, proxy_port = socks_dynamic_port)
     else:
         smtp = smtplib.SMTP(smtp_host, smtp_port)
 
