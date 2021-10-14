@@ -229,7 +229,7 @@ def fetch_and_process_patches(mydb, jobs_list):
         res = mydb.query("patch", keys, "WHERE msg_id = \"%s\"" % msg_id)
         if res:
             continue
-        mydb.insert("patch", {"msg_id" : "%s" % msg_id})
+        mydb.insert("patch", {"msg_id" : "%s" % msg_id, "subject_email" : subject_email})
 
         patch_list.append({"msg_id" : msg_id, "series_id" : series_id, "event_id" : event_id,
             "msg_id" : msg_id, "mbox" : mbox, "author_email" : author_email,
@@ -372,7 +372,7 @@ if __name__ == "__main__":
 
     # this tables stores the patches we have already processed locally
     # it is used for checking we don't run the same job twice
-    mydb.create_missing_table("patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256))")
+    mydb.create_missing_table("patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256), subject_email VARCHAR(256))")
 
     while 1:
         patch_list = fetch_and_process_patches(mydb, jobs_list)
