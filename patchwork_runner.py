@@ -229,7 +229,7 @@ def fetch_and_process_patches(mydb, jobs_list):
         res = mydb.query("patch", keys, "WHERE msg_id = \"%s\"" % msg_id)
         if res:
             continue
-        mydb.insert("patch", {"msg_id" : "%s" % msg_id, "subject_email" : subject_email})
+        mydb.insert("patch", {"msg_id" : msg_id, "subject_email" : subject_email})
 
         patch_list.append({"msg_id" : msg_id, "series_id" : series_id, "event_id" : event_id,
             "msg_id" : msg_id, "mbox" : mbox, "author_email" : author_email,
