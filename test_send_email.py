@@ -19,7 +19,7 @@ db_user = env["PATCHWORK_DB_USER"]
 db_password = env["PATCHWORK_DB_PASSWORD"]
 
 smtp_host = env["PATCHWORK_SMTP_HOST"]
-smtp_port = env["PATCHWORK_SMTP_PORT"]
+smtp_port = int(env["PATCHWORK_SMTP_PORT"])
 user_email = env["PATCHWORK_USER_EMAIL"]
 cc_email = env["PATCHWORK_CC_EMAIL"]
 password_email = env["PATCHWORK_PASSWORD_EMAIL"]
@@ -49,7 +49,7 @@ def send_email_test():
         print ("Using proxy")
         proxy_setup_cmd = "ssh -f -D %d -p %d %s@%s sleep 10" % (socks_dynamic_port, socks_proxy_port, socks_proxy_uname, socks_proxy_ip)
         ret = subprocess.run(proxy_setup_cmd, shell=True)
-        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = socks_proxy_uname, proxy_port = socks_dynamic_port)
+        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = proxy_host, proxy_port = socks_dynamic_port)
     else:
         smtp = smtplib.SMTP(smtp_host, smtp_port)
 
