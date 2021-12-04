@@ -1,12 +1,29 @@
 import mysql.connector
+import time
+import threading
 
 class SQLDatabase():
 
     def __init__(self, host, user, password):
-        self.mydb = mysql.connector.connect(host=host, user=user, password=password, database="mysql")
+        self.host = host
+        self.user = user
+        self.password = password
+        self.mydb = self.init_db()
+
+    def init_db(self):
+        return mysql.connector.connect(host=self.host, user=self.user, password=self.password, database="mysql")
+
+    def get_cursor(self):
+        try:
+            self.mydb.ping(reconnect=True, attemts=3, delay=5)
+        except:
+            self.mydb = self.init_db()
+
+        return self.mydb.cursor(buffered=True)
+
 
     def create_missing_table(self, name, columns):
-        cursor = self.mydb.cursor(buffered=True)
+        cursor = self.get_cursor()
         cursor.execute("SHOW TABLES LIKE \'%s\'" % name)
         if cursor.rowcount != -1 and cursor.rowcount != 0:
             print ("Table %s already exists" % name)
@@ -18,7 +35,7 @@ class SQLDatabase():
         return
 
     def query(self, table_name, keys, filter_command):
-        cursor = self.mydb.cursor(buffered=True)
+        cursor = self.get_cursor()
 
         str_cols = ", ".join(keys)
         sql_query = "SELECT %s FROM %s %s" % (str_cols, table_name, filter_command)
@@ -33,7 +50,7 @@ class SQLDatabase():
         return out
 
     def insert(self, table, key_value_dict):
-        cursor = self.mydb.cursor(buffered=True)
+        cursor = self.get_cursor()
 
         keys_str = ""
         values_str = ""
@@ -60,7 +77,7 @@ class SQLDatabase():
         self.mydb.commit()
 
     def update(self, table, ref_key, ref_value, keys, values):
-        cursor = self.mydb.cursor(buffered=True)
+        cursor = self.get_cursor()
 
         str_filt = ""
         for k, v in zip(ref_key, ref_value):
