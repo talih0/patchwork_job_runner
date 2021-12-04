@@ -43,7 +43,7 @@ def send_email_test():
     msg_email.set_content(msg)
     msg_email["Subject"] = "hi"
     msg_email["From"] = "Patchwork <%s>" % user_email
-    msg_email["To"] = "andriy.gelman@gmail.com"
+    msg_email["To"] = user_email
 
     if use_proxy == 1:
         print ("Using proxy")
