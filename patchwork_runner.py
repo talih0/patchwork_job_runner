@@ -362,8 +362,8 @@ if __name__ == "__main__":
     # when the db is first setup there are no tables. so init them
     for job in jobs_list:
         mydb.create_missing_table(job.name, ("(id INT AUTO_INCREMENT PRIMARY KEY, commit_hash BINARY(20), "
-                                             "setup_success BIT(1), setup_log TEXT, build_success BIT(1), build_log TEXT,"
-                                             "unit_test_success BIT(1), unit_test_log TEXT, number_of_warnings INT)"))
+                                             "setup_success BIT(1), setup_log LONGTEXT, build_success BIT(1), build_log LONGTEXT,"
+                                             "unit_test_success BIT(1), unit_test_log LONGTEXT, number_of_warnings INT)"))
 
     # this table is used to track if we have sent an email to user for a specific
     # series. We don't want to send an email for each commit that's failed, but
