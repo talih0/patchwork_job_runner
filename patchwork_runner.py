@@ -160,7 +160,7 @@ def notify_by_email(mydb, patch):
 
     msg_email = EmailMessage()
     msg_email.set_content(msg)
-    msg_email["Subject"] = patch["subject_email"]
+    msg_email["Subject"] = "Re: " + patch["subject_email"]
     msg_email["From"] = "Patchwork <%s>" % user_email
     msg_email["To"] = patch["author_email"]
     msg_email["Cc"] = cc_email
