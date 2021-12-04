@@ -214,6 +214,10 @@ def fetch_and_process_patches(mydb, jobs_list):
         author_email  = reply_patch["submitter"]["email"]
         subject_email = reply_patch["headers"]["Subject"]
         subject_email = subject_email.replace("\n", "")
+        subject_email = subject_email.replace('\"', '')
+
+        subject_email = subject_email[:256]
+        msg_id = msg_id[:256]
 
         check_url     = reply_patch["checks"]
         print ("Author email: %s" % author_email)
