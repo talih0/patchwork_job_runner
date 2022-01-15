@@ -287,10 +287,10 @@ def fetch_and_process_patches(mydb, jobs_list):
                     git_cmd = git_cmd_template + "am --keep-cr --skip"
                     ret = subprocess.run(git_cmd, capture_output=True, shell=True)
                     if ret.returncode != 0:
-                        post_check(patch["check_url"], "warning", "configure" + job.name, "Failed to apply patch", "")
+                        post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", "")
                         continue
                 else:
-                    post_check(patch["check_url"], "warning", "configure" + job.name, "Failed to apply patch", ret.stderr)
+                    post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", ret.stderr)
                     continue
 
             # check commit message
@@ -322,7 +322,7 @@ def fetch_and_process_patches(mydb, jobs_list):
             job_result_prev = run_job(mydb, prev_hash, job)
 
             if job_result["number_of_warnings"] > job_result_prev["number_of_warnings"]:
-                post_check(patch["check_url"], "warning", "make" + job.name, "New warnings during build", "")
+                post_check(patch["check_url"], "warning", "make_" + job.name, "New warnings during build", "")
 
             if job_result["setup_success"] == 0 and job_result_prev["setup_success"] == 1:
                 notify_by_email(mydb, patch)
