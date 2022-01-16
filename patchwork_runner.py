@@ -183,6 +183,33 @@ def notify_by_email(mydb, patch):
 
     mydb.update("series", ["series_id"], ["%d " % series_id], ["email_sent"], ["1"])
 
+def regex_version_and_commit(subject):
+    subject_clean_re = re.compile('\[[^]]*\]\s+(\[[^]]*\])')
+    version_re = re.compile('[vV](\d+)')
+    commit_entry_re = re.compile('(\d+)/(\d+)')
+
+    subject_clean_match = subject_clean_re.match(subject)
+    if subject_clean_match == None:
+        return 1, 1, 1
+
+    label = subject_clean_re.match(subject).group(1)
+    version_match = version_re.search(label)
+
+    if version_match == None:
+        version_num = 1
+    else:
+        version_num = int(version_match.group(1))
+
+    commit_entry_match = commit_entry_re.search(label)
+    if commit_entry_match == None:
+        commit_entry_num = 1
+        commit_entry_den = 1
+    else:
+        commit_entry_num = int(commit_entry_match.group(1))
+        commit_entry_den = int(commit_entry_match.group(2))
+
+    return version_num, commit_entry_num, commit_entry_den
+
 def fetch_and_process_patches(mydb, jobs_list, time_interval):
 
     patch_list = list()
@@ -253,6 +280,10 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
     for job in jobs_list:
 
         for patch in patch_list:
+
+            _, commit_num, commit_den = regex_version_and_commit(patch["subject_email"])
+            if job.config["run_full_series"] == False and commit_num != commit_den:
+                continue
 
             git_cmd = git_cmd_template + "am --abort"
             subprocess.run(git_cmd, shell=True)
@@ -351,6 +382,7 @@ if __name__ == "__main__":
     config_x86["fate_flags"]    = "-k -j44"
     config_x86["uid"]           = uid
     config_x86["gid"]           = gid
+    config_x86["run_full_series"] = True
     jobs_list.append(Job("x86", config_x86))
 
     config_ppc = dict()
@@ -361,6 +393,7 @@ if __name__ == "__main__":
     config_ppc["fate_flags"]    = "-k -j44"
     config_ppc["uid"]           = uid
     config_ppc["gid"]           = gid
+    config_ppc["run_full_series"] = True
     jobs_list.append(Job("ppc", config_ppc))
 
     # when the db is first setup there are no tables. so init them
