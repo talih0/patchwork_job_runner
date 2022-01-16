@@ -183,14 +183,14 @@ def notify_by_email(mydb, patch):
 
     mydb.update("series", ["series_id"], ["%d " % series_id], ["email_sent"], ["1"])
 
-def fetch_and_process_patches(mydb, jobs_list):
+def fetch_and_process_patches(mydb, jobs_list, time_interval):
 
     patch_list = list()
 
     headers = {"Authorization" : "Token %s" % patchwork_token, "Host": patchwork_host}
 
     utc_time = datetime.utcnow()
-    utc_time = utc_time - relativedelta(hours=2)
+    utc_time = utc_time - relativedelta(minutes = time_interval)
     str_time = utc_time.strftime("%Y-%m-%dT%H:%M:%S")
     str_time = urllib.parse.quote(str_time)
     url_request = "/api/events/?category=patch-completed&since=" + str_time
@@ -378,10 +378,15 @@ if __name__ == "__main__":
     # it is used for checking we don't run the same job twice
     mydb.create_missing_table("patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256), subject_email VARCHAR(256))")
 
+    # in minutes
+    start_time = 0
+    end_time = 0
     while 1:
-        patch_list = fetch_and_process_patches(mydb, jobs_list)
+        time_interval = (end_time - start_time) / 60 + 10
+        start_time = time.time()
+        patch_list = fetch_and_process_patches(mydb, jobs_list, time_interval)
         if not patch_list:
             print ("No patches, sleeping for 5 minutes")
             time.sleep(60*5)
-
+        end_time = time.time()
     mydb.mydb.close()
