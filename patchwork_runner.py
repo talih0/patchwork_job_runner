@@ -257,14 +257,16 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
 
         keys = list()
         keys.append("msg_id")
-        res = mydb.query("patch", keys, "WHERE msg_id = \"%s\"" % msg_id)
-        if res:
-            continue
-        mydb.insert("patch", {"msg_id" : msg_id, "subject_email" : subject_email})
 
-        patch_list.append({"msg_id" : msg_id, "series_id" : series_id, "event_id" : event_id,
-            "msg_id" : msg_id, "mbox" : mbox, "author_email" : author_email,
-            "subject_email" : subject_email, "check_url" : check_url })
+        for job in jobs_list:
+            res = mydb.query(job.name + "_patch", keys, "WHERE msg_id = \"%s\"" % msg_id)
+            if res:
+                continue
+            mydb.insert(job.name + "_patch", {"msg_id" : msg_id, "subject_email" : subject_email})
+
+            patch_list.append({ "job": job, "msg_id" : msg_id, "series_id" : series_id, "event_id" : event_id,
+                "msg_id" : msg_id, "mbox" : mbox, "author_email" : author_email,
+                "subject_email" : subject_email, "check_url" : check_url })
 
 
         keys = list()
@@ -277,92 +279,91 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
 
     print ("Number of patches in list: %d" % len(patch_list))
 
-    for job in jobs_list:
+    for patch in patch_list:
 
-        for patch in patch_list:
+        job = patch["job"]
+        _, commit_num, commit_den = regex_version_and_commit(patch["subject_email"])
+        if job.config["run_full_series"] == False and commit_num != commit_den:
+            continue
 
-            _, commit_num, commit_den = regex_version_and_commit(patch["subject_email"])
-            if job.config["run_full_series"] == False and commit_num != commit_den:
-                continue
+        git_cmd = git_cmd_template + "am --abort"
+        subprocess.run(git_cmd, shell=True)
 
-            git_cmd = git_cmd_template + "am --abort"
-            subprocess.run(git_cmd, shell=True)
+        git_cmd = git_cmd_template + "fetch origin"
+        subprocess.run(git_cmd, shell=True)
 
-            git_cmd = git_cmd_template + "fetch origin"
-            subprocess.run(git_cmd, shell=True)
+        git_cmd = git_cmd_template + "checkout master"
+        subprocess.run(git_cmd, shell=True)
 
-            git_cmd = git_cmd_template + "checkout master"
-            subprocess.run(git_cmd, shell=True)
+        git_cmd = git_cmd_template + "reset --hard origin/master"
+        subprocess.run(git_cmd, shell=True)
 
-            git_cmd = git_cmd_template + "reset --hard origin/master"
-            subprocess.run(git_cmd, shell=True)
+        max_retries = 10
+        retries = 0
+        while 1:
+            ret = subprocess.run("curl %s/?series=%d > %s/mbox_file" % (patch["mbox"], patch["series_id"], project_root_path), shell=True)
+            if ret.returncode == 0 or retries == max_retries:
+                break
+            retries = retries + 1
+            time.sleep(1*60)
 
-            max_retries = 10
-            retries = 0
-            while 1:
-                ret = subprocess.run("curl %s/?series=%d > %s/mbox_file" % (patch["mbox"], patch["series_id"], project_root_path), shell=True)
-                if ret.returncode == 0 or retries == max_retries:
-                    break
-                retries = retries + 1
-                time.sleep(1*60)
+        if retries == max_retries:
+            print ("Failed to fetch patch %s" % patch["mbox"])
+            continue
 
-            if retries == max_retries:
-                print ("Failed to fetch patch %s" % patch["mbox"])
-                continue
+        git_cmd = git_cmd_template + "am --keep-cr -3 --committer-date-is-author-date --exclude=Changelog mbox_file"
+        ret = subprocess.run(git_cmd, capture_output=True, shell=True)
 
-            git_cmd = git_cmd_template + "am --keep-cr -3 --committer-date-is-author-date --exclude=Changelog mbox_file"
-            ret = subprocess.run(git_cmd, capture_output=True, shell=True)
-
-            if ret.returncode != 0:
-                if re.search(b"Patch is empty", ret.stdout):
-                    git_cmd = git_cmd_template + "am --keep-cr --skip"
-                    ret = subprocess.run(git_cmd, capture_output=True, shell=True)
-                    if ret.returncode != 0:
-                        post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", "")
-                        continue
-                else:
-                    post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", ret.stderr)
+        if ret.returncode != 0:
+            if re.search(b"Patch is empty", ret.stdout):
+                git_cmd = git_cmd_template + "am --keep-cr --skip"
+                ret = subprocess.run(git_cmd, capture_output=True, shell=True)
+                if ret.returncode != 0:
+                    post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", "")
                     continue
+            else:
+                post_check(patch["check_url"], "warning", "configure_" + job.name, "Failed to apply patch", ret.stderr)
+                continue
 
-            # check commit message
-            git_cmd = git_cmd_template + " log --format=%B -n 1 master"
-            ret = subprocess.run(git_cmd, capture_output=True, shell=True)
-            commit_msg = ret.stdout.decode("utf-8")
-            warn = check_commit_message(commit_msg)
-            if warn:
-                print (warn)
-                post_check(patch["check_url"], "warning", "commit_msg_" + job.name, warn, "")
-                notify_by_email(mydb, patch)
+        # check commit message
+        git_cmd = git_cmd_template + " log --format=%B -n 1 master"
+        ret = subprocess.run(git_cmd, capture_output=True, shell=True)
+        commit_msg = ret.stdout.decode("utf-8")
+        warn = check_commit_message(commit_msg)
+        if warn:
+            print (warn)
+            post_check(patch["check_url"], "warning", "commit_msg_" + job.name, warn, "")
+            notify_by_email(mydb, patch)
 
-            git_cmd = git_cmd_template + " rev-parse master"
-            ret = subprocess.run(git_cmd, capture_output=True, shell=True)
-            current_hash = ret.stdout
-            current_hash = current_hash[0:40]
-            print ("Current hash %s" % current_hash)
-            job_result = run_job(mydb, current_hash, job)
-            submit_job_result(mydb, job, job_result, patch["check_url"])
+        git_cmd = git_cmd_template + " rev-parse master"
+        ret = subprocess.run(git_cmd, capture_output=True, shell=True)
+        current_hash = ret.stdout
+        current_hash = current_hash[0:40]
+        print ("Current hash %s" % current_hash)
+        job_result = run_job(mydb, current_hash, job)
+        submit_job_result(mydb, job, job_result, patch["check_url"])
 
-            #  get the hash of HEAD~
-            git_cmd = git_cmd_template + " rev-parse master~"
-            ret = subprocess.run(git_cmd, capture_output=True, shell=True)
-            prev_hash = ret.stdout
-            prev_hash = prev_hash[0:40]
+        #  get the hash of HEAD~
+        git_cmd = git_cmd_template + " rev-parse master~"
+        ret = subprocess.run(git_cmd, capture_output=True, shell=True)
+        prev_hash = ret.stdout
+        prev_hash = prev_hash[0:40]
 
-            git_cmd = git_cmd_template + "reset --hard master~"
-            subprocess.run(git_cmd, shell=True)
-            job_result_prev = run_job(mydb, prev_hash, job)
+        git_cmd = git_cmd_template + "reset --hard master~"
+        subprocess.run(git_cmd, shell=True)
+        job_result_prev = run_job(mydb, prev_hash, job)
 
-            if job_result["number_of_warnings"] > job_result_prev["number_of_warnings"]:
-                post_check(patch["check_url"], "warning", "make_" + job.name, "New warnings during build", "")
+        if job_result["number_of_warnings"] > job_result_prev["number_of_warnings"]:
+            post_check(patch["check_url"], "warning", "make_" + job.name, "New warnings during build", "")
 
-            if job_result["setup_success"] == 0 and job_result_prev["setup_success"] == 1:
-                notify_by_email(mydb, patch)
+        if job_result["setup_success"] == 0 and job_result_prev["setup_success"] == 1:
+            notify_by_email(mydb, patch)
 
-            if job_result['build_success'] == 0 and job_result_prev['build_success'] == 1:
-                notify_by_email(mydb, patch)
+        if job_result['build_success'] == 0 and job_result_prev['build_success'] == 1:
+            notify_by_email(mydb, patch)
 
-            if job_result['unit_test_success'] == 0 and job_result_prev['unit_test_success'] == 1:
-                notify_by_email(mydb, patch)
+        if job_result['unit_test_success'] == 0 and job_result_prev['unit_test_success'] == 1:
+            notify_by_email(mydb, patch)
 
     return patch_list
 
@@ -402,14 +403,14 @@ if __name__ == "__main__":
                                              "setup_success BIT(1), setup_log LONGTEXT, build_success BIT(1), build_log LONGTEXT,"
                                              "unit_test_success BIT(1), unit_test_log LONGTEXT, number_of_warnings INT)"))
 
+        # this tables stores the patches we have already processed locally
+        # it is used for checking we don't run the same job twice
+        mydb.create_missing_table(job.name + "_patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256), subject_email VARCHAR(256))")
+
     # this table is used to track if we have sent an email to user for a specific
     # series. We don't want to send an email for each commit that's failed, but
     # only once per series
     mydb.create_missing_table("series", "(id INT AUTO_INCREMENT PRIMARY KEY, series_id INT, email_sent BIT(1))")
-
-    # this tables stores the patches we have already processed locally
-    # it is used for checking we don't run the same job twice
-    mydb.create_missing_table("patch", "(id INT AUTO_INCREMENT PRIMARY KEY, msg_id VARCHAR(256), subject_email VARCHAR(256))")
 
     # in minutes
     start_time = 0

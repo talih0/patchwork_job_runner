@@ -19,7 +19,10 @@ recomended for isolating the process.
 --- Caching results ---
 The code currently uses a mysql database to track information and cache job
 results. The config of the database are set by the environment variables:
-PATCHWORK_DB_{HOST,USER,PASSWORD}.
+PATCHWORK_DB_{HOST,USER,PASSWORD}. Multiple runners on different physical
+machines may share a common mysql database or use a dedicated database. Sharing
+a common database allows to check whether an automated email was already
+sent for a series.
 
 --- Automated emails ---
 If a CI job fails, an automated email is triggered to the patch author with a
