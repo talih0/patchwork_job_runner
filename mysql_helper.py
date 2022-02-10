@@ -15,7 +15,7 @@ class SQLDatabase():
 
     def get_cursor(self):
         try:
-            self.mydb.ping(reconnect=True, attemts=3, delay=5)
+            self.mydb.ping(reconnect=True, attempts=3, delay=5)
         except:
             self.mydb = self.init_db()
 
