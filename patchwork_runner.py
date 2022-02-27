@@ -1,6 +1,5 @@
 import email
 import json
-import os
 import re
 import requests
 import smtplib
@@ -9,6 +8,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+import yaml
 
 from commit_message_filter import check_commit_message
 from datetime import datetime, timezone
@@ -17,31 +17,6 @@ from email.message import EmailMessage
 from job import Job
 from mysql_helper import SQLDatabase
 from proxy_smtplib import ProxySMTP
-
-env = os.environ
-use_proxy = int(env["PATCHWORK_USE_PROXY"])
-socks_dynamic_port = int(env["PATCHWORK_SOCKS_DYNAMIC_PORT"])
-proxy_host = env["PATCHWORK_PROXY_HOST"]
-socks_proxy_uname = env["PATCHWORK_SOCKS_PROXY_UNAME"]
-socks_proxy_ip = env["PATCHWORK_SOCKS_PROXY_IP"]
-socks_proxy_port = int(env["PATCHWORK_SOCKS_PROXY_PORT"])
-
-db_host = env["PATCHWORK_DB_HOST"]
-db_user = env["PATCHWORK_DB_USER"]
-db_password = env["PATCHWORK_DB_PASSWORD"]
-
-smtp_host = env["PATCHWORK_SMTP_HOST"]
-smtp_port = int(env["PATCHWORK_SMTP_PORT"])
-user_email = env["PATCHWORK_USER_EMAIL"]
-cc_email = env["PATCHWORK_CC_EMAIL"]
-password_email = env["PATCHWORK_PASSWORD_EMAIL"]
-
-uid = int(env["PATCHWORK_UID"])
-gid = int(env["PATCHWORK_GID"])
-
-patchwork_token = env["PATCHWORK_TOKEN"]
-patchwork_host = env["PATCHWORK_HOST"]
-project_root_path = env["PATCHWORK_PROJECT_ROOT_PATH"]
 
 def post_check(check_url, type_check, context, msg_short, msg_long):
 
@@ -138,7 +113,7 @@ def run_job(mydb, commit_hash, job):
     mydb.insert(job.name, job_result)
     return job_result
 
-def notify_by_email(mydb, patch):
+def notify_by_email(mydb, patch, config_smtp):
 
     print ("Sending email notification")
 
@@ -146,8 +121,11 @@ def notify_by_email(mydb, patch):
     keys.append("email_sent")
 
     series_id = patch["series_id"]
-    res = mydb.query("series", keys, "WHERE series_id = %d" % series_id)
-    email_sent = res["email_sent"]
+    email_sent = False
+    if mydb is not None:
+        res = mydb.query("series", keys, "WHERE series_id = %d" % series_id)
+        email_sent = res["email_sent"]
+
     if email_sent:
         return
 
@@ -161,27 +139,28 @@ def notify_by_email(mydb, patch):
     msg_email = EmailMessage()
     msg_email.set_content(msg)
     msg_email["Subject"] = "Re: " + patch["subject_email"]
-    msg_email["From"] = "Patchwork <%s>" % user_email
+    msg_email["From"] = "Patchwork <%s>" % config_smtp["user"]
     msg_email["To"] = patch["author_email"]
-    msg_email["Cc"] = cc_email
+    msg_email["Cc"] = config_smtp["cc_email"]
     msg_email["In-Reply-To"] = patch["msg_id"]
     msg_email["References"] = patch["msg_id"]
 
-    print ("Proxy is %d" % use_proxy)
-    if use_proxy == 1:
+    config_proxy = config_smtp["proxy"]
+    print ("Proxy is %d" % config_proxy["enabled"])
+    if config_proxy["enabled"]:
         print ("Using proxy")
-        proxy_setup_cmd = "ssh -f -D %d -p %d %s@%s sleep 10" % (socks_dynamic_port, socks_proxy_port, socks_proxy_uname, socks_proxy_ip)
-        ret = subprocess.run(proxy_setup_cmd, shell=True)
-        smtp = ProxySMTP(smtp_host, smtp_port, proxy_addr = proxy_host, proxy_port = socks_dynamic_port)
+        ret = subprocess.run(config_proxy["cmd"], shell=True)
+        smtp = ProxySMTP(config_smtp["host"], config_smtp["port"], proxy_addr = config_proxy["proxy_addr"], proxy_port = config_proxy["proxy_port"])
     else:
-        smtp = smtplib.SMTP(smtp_host, smtp_port)
+        smtp = smtplib.SMTP(config_smtp["host"], config_smtp["port"])
 
     smtp.starttls()
-    smtp.login(user_email, password_email)
+    smtp.login(config_smtp["user"], config_smtp["password"])
     smtp.sendmail(msg_email["From"], msg_email["To"], msg_email.as_string())
     smtp.quit()
 
-    mydb.update("series", ["series_id"], ["%d " % series_id], ["email_sent"], ["1"])
+    if mydb is not None:
+        mydb.update("series", ["series_id"], ["%d " % series_id], ["email_sent"], ["1"])
 
 def regex_version_and_commit(subject):
     subject_clean_re = re.compile('\[[^]]*\]\s+(\[[^]]*\])')
@@ -210,18 +189,18 @@ def regex_version_and_commit(subject):
 
     return version_num, commit_entry_num, commit_entry_den
 
-def fetch_and_process_patches(mydb, jobs_list, time_interval):
+def fetch_and_process_patches(mydb, jobs_list, time_interval, config_pw):
 
     patch_list = list()
 
-    headers = {"Authorization" : "Token %s" % patchwork_token, "Host": patchwork_host}
+    headers = {"Authorization" : "Token %s" % config_pw["token"], "Host": config_pw["token"]}
 
     utc_time = datetime.utcnow()
     utc_time = utc_time - relativedelta(minutes = time_interval)
     str_time = utc_time.strftime("%Y-%m-%dT%H:%M:%S")
     str_time = urllib.parse.quote(str_time)
     url_request = "/api/events/?category=patch-completed&since=" + str_time
-    url = "https://" + patchwork_host + url_request
+    url = "https://" + config_pw["host"] + url_request
 
     resp = requests.get(url, headers = headers)
     print (resp)
@@ -275,13 +254,13 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
         if not res:
             mydb.insert("series", {"series_id" : "%d" % series_id, "email_sent" : 0})
 
-    git_cmd_template = "git --git-dir=%s/.git --work-tree=%s " % (project_root_path, project_root_path)
 
     print ("Number of patches in list: %d" % len(patch_list))
 
     for patch in patch_list:
 
         job = patch["job"]
+        git_cmd_template = "git --git-dir=%s/.git --work-tree=%s " % (job.config["wd"], job.config["wd"])
         _, commit_num, commit_den = regex_version_and_commit(patch["subject_email"])
         if job.config["run_full_series"] == False and commit_num != commit_den:
             continue
@@ -301,7 +280,7 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
         max_retries = 10
         retries = 0
         while 1:
-            ret = subprocess.run("curl %s/?series=%d > %s/mbox_file" % (patch["mbox"], patch["series_id"], project_root_path), shell=True)
+            ret = subprocess.run("curl %s/?series=%d > %s/mbox_file" % (patch["mbox"], patch["series_id"], job.config["wd"]), shell=True)
             if ret.returncode == 0 or retries == max_retries:
                 break
             retries = retries + 1
@@ -333,7 +312,7 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
         if warn:
             print (warn)
             post_check(patch["check_url"], "warning", "commit_msg_" + job.name, warn, "")
-            notify_by_email(mydb, patch)
+            notify_by_email(mydb, patch, config_pw["smtp"])
 
         git_cmd = git_cmd_template + " rev-parse master"
         ret = subprocess.run(git_cmd, capture_output=True, shell=True)
@@ -357,45 +336,32 @@ def fetch_and_process_patches(mydb, jobs_list, time_interval):
             post_check(patch["check_url"], "warning", "make_" + job.name, "New warnings during build", "")
 
         if job_result["setup_success"] == 0 and job_result_prev["setup_success"] == 1:
-            notify_by_email(mydb, patch)
+            notify_by_email(mydb, patch, config_pw["smtp"])
 
         if job_result['build_success'] == 0 and job_result_prev['build_success'] == 1:
-            notify_by_email(mydb, patch)
+            notify_by_email(mydb, patch, config_pw["smtp"])
 
         if job_result['unit_test_success'] == 0 and job_result_prev['unit_test_success'] == 1:
-            notify_by_email(mydb, patch)
+            notify_by_email(mydb, patch, config_pw["smtp"])
 
     return patch_list
 
 if __name__ == "__main__":
 
+    if len(sys.argv) != 2:
+        print("Usage:\n $ python3 patchwork_runner.py config.yaml")
+        sys.exit(1)
+
+    with  open(sys.argv[1], 'r') as file:
+        config = yaml.safe_load(file)
+
     # local database for storing cached job results
-    mydb = SQLDatabase(db_host, db_user, db_password)
+    mydb = SQLDatabase(config["db"])
 
     jobs_list = list()
 
-    # setup configuration
-    config_x86 = dict()
-    config_x86["wd"]            = project_root_path
-    config_x86["docker_image"]  = "ffmpeg_build:latest"
-    config_x86["setup_command"] = "source run_configure"
-    config_x86["build_flags"]   = "-j44"
-    config_x86["fate_flags"]    = "-k -j44"
-    config_x86["uid"]           = uid
-    config_x86["gid"]           = gid
-    config_x86["run_full_series"] = True
-    jobs_list.append(Job("x86", config_x86))
-
-    config_ppc = dict()
-    config_ppc["wd"]            = project_root_path
-    config_ppc["docker_image"]  = "ffmpeg_build_ppc:latest"
-    config_ppc["setup_command"] = "source run_configure_ppc"
-    config_ppc["build_flags"]   = "-j44"
-    config_ppc["fate_flags"]    = "-k -j44"
-    config_ppc["uid"]           = uid
-    config_ppc["gid"]           = gid
-    config_ppc["run_full_series"] = True
-    jobs_list.append(Job("ppc", config_ppc))
+    for name, config_runner in config["runner"].items():
+        jobs_list.append(Job(name, config_runner))
 
     # when the db is first setup there are no tables. so init them
     for job in jobs_list:
@@ -418,7 +384,7 @@ if __name__ == "__main__":
     while 1:
         time_interval = (end_time - start_time) / 60 + 10
         start_time = time.time()
-        patch_list = fetch_and_process_patches(mydb, jobs_list, time_interval)
+        patch_list = fetch_and_process_patches(mydb, jobs_list, time_interval, config["patchwork"])
         if not patch_list:
             print ("No patches, sleeping for 5 minutes")
             time.sleep(60*5)

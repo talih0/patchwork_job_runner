@@ -18,9 +18,8 @@ recomended for isolating the process.
 
 --- Caching results ---
 The code currently uses a mysql database to track information and cache job
-results. The config of the database are set by the environment variables:
-PATCHWORK_DB_{HOST,USER,PASSWORD}. Multiple runners on different physical
-machines may share a common mysql database or use a dedicated database. Sharing
+results. The database client settings are defined in the config yaml file. Multiple runners
+on different physical machines may share a common mysql database or use a dedicated database. Sharing
 a common database allows to check whether an automated email was already
 sent for a series.
 
@@ -30,31 +29,27 @@ link to the patchwork site where the warning or error is shown. To prevent
 spamming the author, only one email is triggered per patch series. An email is
 also only sent if the parent commit builds successfully. Thus if current
 origin/master doesn't build, an email will not be sent (unless a commit fixes
-the issue and breaks it another commit of the series). The environment variables
-for connecting to an SMTP server are
-PATCHWORK_SMTP_{HOST,PORT}, PATCHWORK_{USER_EMAIL,PASSWORD_EMAIL}.
-The environment variable PATCHWORK_CC_EMAIL is used to add a cc email address.
+the issue and breaks it another commit of the series). The client configs for
+connecting to the smtp server are set in the config yaml file in the section
+"smtp".
 
 --- Patchwork authentication ---
 An account (on https://patchwork.ffmpeg.org) and proper permission are needed to post
 CI results back to the patchwork site. Email your patchwork site maintainer in
 (FFmpeg/MAINTERNERS) with your username if you want the permissions added to your account.
 After the permissions are set up, an API token can be obtained after logging in
-to the patchwork site. The environment variable PATCHWORK_TOKEN stores the api
-token. The variable PATCHWORK_HOST needs to be set to patchwork.ffmpeg.org or
-another patchwork site.
+to the patchwork site. The section "patchwork" in config yaml file stores the
+host and token for connecting to the patchwork site.
 
--- Other environemnt variables --
-The following variables are used by the docker container for the CI job:
-PATCHWORK_{UID,GID} set the uid/gid of the docker container.
-PATCHWORK_PROJECT_ROOT_PATH is the path to the main FFmpeg directory.
+-- Other yaml config sections --
+Section "runners" stores the CI jobs to run.
 
 -- Steps to setup a CI job runner --
 1. Create an account on patchwork.ffmpeg.org and email your patchwork maintainer to setup
 permissions.
 2. Modify class Job in job.py for your CI job setup.
-3. Export the environment variables described above.
+3. Set the configurations in the config.yaml file.
 4. Start a mysql server instance, i.e. using docker:
 $ docker run --name "ffmpeg_mysql" -e MYSQL_ROOT_PASSWORD=${PATCHWORK_DB_PASSWORD} --rm -v sqldb:/var/lib/mysql -p 3306:3306 mysql:5.7
 5. Start the job runner with:
-$ python patchwork_runner.py
+$ python patchwork_runner.py config.yaml

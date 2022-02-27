@@ -1,0 +1,43 @@
+runners:
+    x86:
+        wd: "/home/user/ffmpeg_sources/ffmpeg"
+        uid: 1001
+        gid: 1001
+        docker_image: "ffmpeg_build:latest"
+        setup_command: "source run_configure"
+        build_flags: "-j44"
+        fate_flags: "-k -j44"
+        run_full_series: True
+
+    ppc:
+        wd: "/home/user/ffmpeg_sources/ffmpeg"
+        uid: 1001
+        gid: 1001
+        docker_image: "ffmpeg_build_ppc:latest"
+        setup_command: "source run_configure"
+        build_flags: "-j44"
+        fate_flags: "-k -j44"
+        run_full_series: True
+
+db:
+    host: "127.0.0.1"
+    user: "user"
+    password: "password"
+    db_name: "mysql"
+
+patchwork:
+    host: "patchwork.ffmpeg.org"
+    token: "abcdefg12345"
+
+    smtp:
+        enabled: True
+        host: "smtp.gmail.com"
+        port: 587
+        user: "user@gmail.com"
+        password: "password"
+        cc_email: "ccemail@gmail.com"
+        proxy:
+            enabled: False
+            cmd: "ssh -f -D 2345 -p 5678 user@127.0.0.1 sleep 10"
+            proxy_addr: "localhost"
+            proxy_port: 2345

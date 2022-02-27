@@ -4,14 +4,13 @@ import threading
 
 class SQLDatabase():
 
-    def __init__(self, host, user, password):
-        self.host = host
-        self.user = user
-        self.password = password
+    def __init__(self, config_db):
+        self.config = config_db
         self.mydb = self.init_db()
 
     def init_db(self):
-        return mysql.connector.connect(host=self.host, user=self.user, password=self.password, database="mysql")
+        return mysql.connector.connect(host=self.config["host"], user=self.config["user"],
+                password=self.config["password"], database=self.config["db_name"])
 
     def get_cursor(self):
         try:
