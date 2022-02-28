@@ -9,8 +9,13 @@ class SQLDatabase():
         self.mydb = self.init_db()
 
     def init_db(self):
-        return mysql.connector.connect(host=self.config["host"], user=self.config["user"],
-                password=self.config["password"], database=self.config["db_name"])
+        if self.config["ssl"]["enabled"]:
+            return mysql.connector.connect(host=self.config["host"], user=self.config["user"],
+                    database=self.config["db_name"], ssl_ca=self.config["ssl"]["ssl_ca"],
+                    ssl_cert=self.config["ssl"]["ssl_cert"], ssl_key=self.config["ssl"]["ssl_key"])
+        else:
+            return mysql.connector.connect(host=self.config["host"], user=self.config["user"],
+                    password=self.config["password"], database=self.config["db_name"])
 
     def get_cursor(self):
         try:

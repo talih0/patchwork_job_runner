@@ -24,6 +24,11 @@ db:
     user: "user"
     password: "password"
     db_name: "mysql"
+    ssl:
+        enabled: False
+        ssl_ca: "ssl_keys/ca-cert.pem"
+        ssl_cert: "ssl_keys/client-cert.pem"
+        ssl_key: "ssl_keys/client-key.pem"
 
 patchwork:
     host: "patchwork.ffmpeg.org"
